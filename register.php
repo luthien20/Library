@@ -14,7 +14,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit();
     }
 
-    // Example of database insert (replace with your DB details)
     $conn = new mysqli("localhost", "root", "", "library_db");
 
     if ($conn->connect_error) {
