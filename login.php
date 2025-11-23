@@ -6,14 +6,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = $_POST['password'];
     $role = $_POST['role'];
 
-    // Connect to database
+    
     $conn = new mysqli("localhost", "root", "", "library_db");
 
     if ($conn->connect_error) {
         die("Connection failed: " . $conn->connect_error);
     }
 
-    // Check if user exists
+    
     $sql = "SELECT * FROM users WHERE (email='$email' OR 
         student_id='$email') AND role='$role' LIMIT 1";
     $result = $conn->query($sql);
@@ -25,7 +25,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $_SESSION['role'] = $row['role'];
             $_SESSION['full_name'] = $row['full_name'];
 
-            // Redirect based on role
             if ($row['role'] == "Librarian") {
                 header("Location: librarian_dashboard.php");
             } elseif ($row['role'] == "Teacher") {
