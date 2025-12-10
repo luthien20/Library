@@ -1,565 +1,327 @@
-<<<<<<< HEAD
-<?php
-session_start();
-include 'db.php';
-
-// Redirect if not logged in
-if (!isset($_SESSION['full_name'])) {
-    header("Location: login.php");
-    exit();
-}
-
-$student_id = $_SESSION['user_id'] ?? null;
-
-// Default counts
-$borrowedCount = $reservedCount = $overdueCount = $feeAmount = 0;
-
-// Fetch stats if logged in
-if ($student_id) {
-    // 1. Borrowed
-    $borrowedQuery = "SELECT COUNT(*) AS total FROM borrow_records WHERE student_id = '$student_id' AND status = 'borrowed'";
-    $borrowedResult = $conn->query($borrowedQuery);
-    if ($borrowedResult) $borrowedCount = $borrowedResult->fetch_assoc()['total'] ?? 0;
-
-    // 2. Reserved
-    $reservedQuery = "SELECT COUNT(*) AS total FROM borrow_records WHERE student_id = '$student_id' AND status = 'reserved'";
-    $reservedResult = $conn->query($reservedQuery);
-    if ($reservedResult) $reservedCount = $reservedResult->fetch_assoc()['total'] ?? 0;
-
-    // 3. Overdue
-    $overdueQuery = "SELECT COUNT(*) AS total FROM borrow_records WHERE student_id = '$student_id' AND status = 'borrowed' AND due_date < NOW()";
-    $overdueResult = $conn->query($overdueQuery);
-    if ($overdueResult) $overdueCount = $overdueResult->fetch_assoc()['total'] ?? 0;
-
-    // 4. Fees
-    $feeQuery = "SELECT SUM(amount) AS total FROM fees WHERE student_id = '$student_id' AND status = 'unpaid'";
-    $feeResult = $conn->query($feeQuery);
-    if ($feeResult) $feeAmount = $feeResult->fetch_assoc()['total'] ?? 0;
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Library Portal</title>
-    <link rel="stylesheet" href="studentstyle.css">
+  <meta charset="UTF-8" />
+  <title>Student Library Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f7f8fc;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --accent: #10b981;
+      --border: #e5e7eb;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .app {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    grid-template-rows: auto;
+    grid-template-areas: "main sidebar";
+    gap: 20px;
+    height: 100%;
+    }
+    main {
+    grid-area: main;
+        
+    }
+    .sidebar {
+    grid-area: sidebar;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    background: #0f172a;
+    color: #e5e7eb;
+    padding: 24px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-logo {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: linear-gradient(135deg, #2563eb, #10b981);
+    }
+    .brand h1 {
+      font-size: 18px; margin: 0;
+      letter-spacing: 0.3px;
+    }
+    .user {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .user h2 {
+      font-size: 16px; margin: 0 0 4px;
+      color: #fff;
+    }
+    .user p {
+      margin: 0; color: #cbd5e1; font-size: 13px;
+    }
+    .nav {
+      display: grid; gap: 8px;
+    }
+    .nav a {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      color: #e5e7eb; text-decoration: none;
+      border-radius: 8px;
+    }
+    .nav a:hover { background: rgba(255,255,255,0.08); }
+    .nav .signout { color: #fecaca; }
+    .header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      top: 0; z-index: 10;
+      width: 100%;
+    }
+    .header h2 { margin: 0; font-size: 20px; }
+    .help-btn {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .help-btn:hover { background: #f3f4f6; }
+    .content {
+      padding: 24px;
+      display: grid;
+      gap: 20px;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: grid;
+      gap: 8px;
+    }
+    .card .label { color: var(--muted); font-size: 13px; }
+    .card .value { font-size: 24px; font-weight: 700; }
+    .card .note { font-size: 12px; color: var(--muted); }
+    .card.primary .value { color: var(--primary); }
+    .card.success .value { color: var(--accent); }
+    .card.warning .value { color: var(--warning); }
+
+    /* Panels */
+    .panels {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+    }
+
+    /* Books table */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-header h3 {
+      margin: 0; font-size: 16px;
+    }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    thead th {
+      text-align: left;
+      padding: 12px 16px;
+      color: var(--muted);
+      background: #f9fafb;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr:hover { background: #f8fafc; }
+    .empty {
+      padding: 20px 16px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* Notifications */
+    .panel-body { padding: 16px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 12px;
+      background: var(--primary);
+      color: #fff; border: none; border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn.secondary {
+      background: #fff; color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn:hover { filter: brightness(0.95); }
+
+    /* Footer help */
+    .floating-help {
+      position: fixed;
+      right: 24px; bottom: 24px;
+      padding: 12px 14px;
+      background: var(--primary);
+      color: #fff;
+      border: none; border-radius: 999px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      cursor: pointer;
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .panels { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .metrics { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
-<div class="container">
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" aria-label="Sidebar navigation">
+      <section class="user" aria-label="User summary">
+        <div class="brand">
+            <div class="brand-logo" aria-hidden="true"></div>
+        </div>
+        <br>
+        <h2>Claudia Alves</h2>
+        <p>Semester: 2 • Status: Active</p>
+      </section>
 
-    <!-- Header -->
-    <div class="header">
-        <h1>👤 Student Library Portal</h1>
-        <div class="user-info">
-            <div style="margin-left: 20px;">
-                <?php if (isset($_SESSION['full_name'])): ?>
-                    <span style="display: flex; align-items: center; gap: 8px;">
-                        <img src="profile.png" alt="Profile" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
-                        <?= htmlspecialchars($_SESSION['full_name']) ?>
-                    </span>
-                <?php else: ?>
-                    <span>Welcome, Student</span>
-                <?php endif; ?>
+      <nav class="nav" aria-label="Primary">
+        <a href="#profile" aria-label="My profile">👤 My Profile</a>
+        <a href="#settings" aria-label="Settings">⚙️ Settings</a>
+        <a href="#signout" class="signout" aria-label="Sign out">🚪 Sign Out</a>
+      </nav>
+    </aside>
+
+    <!-- Main -->
+    <main>
+        <header class="header">
+            <h2>Student Library</h2>
+        </header>
+      <div class="content">
+        <!-- Metrics -->
+        <section class="metrics" aria-label="Key metrics">
+          <div class="card primary" aria-live="polite">
+            <div class="label">Books borrowed</div>
+            <div class="value">0</div>
+            <div class="note">3 books allowed per semester</div>
+          </div>
+
+          <div class="card success" aria-live="polite">
+            <div class="label">Books reserved</div>
+            <div class="value">0</div>
+          </div>
+
+          <div class="card warning" aria-live="polite">
+            <div class="label">Outstanding fees</div>
+            <div class="value">₱0.00</div>
+          </div>
+        </section>
+
+        <!-- Panels -->
+        <section class="panels">
+          <!-- Books -->
+          <div class="panel" aria-label="Books list">
+            <div class="panel-header">
+              <h3>Books</h3>
+              <div class="actions">
+                <button class="btn secondary" type="button">Add book</button>
+              </div>
             </div>
-            <form action="logout.php" method="POST" style="margin:0;">
-                <button type="submit" class="btn btn-danger">Logout</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-label">Books Borrowed</div>
-            <div class="stat-number borrowed"><?= $borrowedCount ?></div>
-            <div style="font-size: 12px; color: #666;">3 books allowed per semester</div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-label">Books Reserved</div>
-            <div class="stat-number books"><?= $reservedCount ?></div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-label">Overdue Books</div>
-            <div class="stat-number overdue"><?= $overdueCount ?></div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-label">Outstanding Fees</div>
-            <div class="stat-number members">₱<?= number_format($feeAmount, 2) ?></div>
-        </div>
-    </div>
-
-    <!-- Borrowed Books -->
-    <div class="card" style="margin-bottom: 30px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="margin: 0;">My Borrowed Books</h3>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <select style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                    <option>All My Books</option>
-                    <option>Currently Borrowed</option>
-                    <option>Reserved</option>
-                    <option>Overdue</option>
-                </select>
-            </div>
-        </div>
-
-        <table class="book-table">
-            <thead>
-                <tr>
+            <div class="table-wrap">
+              <table aria-describedby="books-empty">
+                <thead>
+                  <tr>
                     <th>Title</th>
                     <th>Author</th>
                     <th>Category</th>
                     <th>Status</th>
                     <th>Availability</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php
-                $query = "
-                    SELECT b.title, b.author, b.category, b.ISBN, br.status, br.due_date
-                    FROM borrow_records AS br
-                    JOIN books AS b ON br.book_id = b.book_id
-                    WHERE br.student_id = '$student_id'
-                    ORDER BY br.borrow_date DESC
-                ";
-
-                $result = $conn->query($query);
-
-                if ($result && $result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        echo "<tr>
-                                <td><strong>" . htmlspecialchars($row['title']) . "</strong><br><small>ISBN: " . htmlspecialchars($row['ISBN']) . "</small></td>
-                                <td>" . htmlspecialchars($row['author']) . "</td>
-                                <td>" . htmlspecialchars($row['category']) . "</td>
-                                <td>" . ucfirst(htmlspecialchars($row['status'])) . "</td>
-                                <td>
-                                    <span class='status-badge status-" . htmlspecialchars($row['status']) . "'>" . ucfirst($row['status']) . "</span>
-                                    " . (!empty($row['due_date']) ? "<br><small>Due: " . date('M d, Y', strtotime($row['due_date'])) . "</small>" : "") . "
-                                </td>
-                              </tr>";
-                    }
-                } else {
-                    echo "<tr><td colspan='5' style='text-align:center; color:#666;'>No borrowed books yet.</td></tr>";
-                }
-                ?>
-            </tbody>
-        </table>
-    </div>
-    <div class="card" style="margin-bottom: 30px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="margin: 0;">Books</h3>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <input type="text" placeholder="Search books..." style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                <button class="btn" style="margin-right: 10px;" onclick="window.location.href='Books.php'">Search</button>
-                <select style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                    <option>All Books</option>
-                    <option>Fiction</option>
-                    <option>Sci-Fi</option>
-                    <option>Horror</option>
-                    <option>Non-Fiction</option>
-                    <option>Romance</option>
-                </select>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Empty state -->
+                  <tr>
+                    <td colspan="5" class="empty" id="books-empty">
+                      No books to display.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-        </div>
+          </div>
 
-        <table class="book-table">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Author</th>
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th>Availability</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php
-                $query = "
-                    SELECT * FROM books ORDER BY title ASC
-                ";
-
-                $result = $conn->query($query);
-
-                if ($result && $result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        echo "<tr>
-                                <td><strong>" . htmlspecialchars($row['title']) . "</strong><br><small>ISBN: " . htmlspecialchars($row['ISBN']) . "</small></td>
-                                <td>" . htmlspecialchars($row['author']) . "</td>
-                                <td>" . htmlspecialchars($row['category']) . "</td>
-                                <td>" . ucfirst(htmlspecialchars($row['status'])) . "</td>
-                                <td>
-                                    <span class='status-badge status-" . htmlspecialchars($row['status']) . "'>" . ucfirst($row['status']) . "</span>
-                                    " . (!empty($row['due_date']) ? "<br><small>Due: " . date('M d, Y', strtotime($row['due_date'])) . "</small>" : "") . "
-                                </td>
-                              </tr>";
-                    }
-                } else {
-                    echo "<tr><td colspan='5' style='text-align:center; color:#666;'>No borrowed books yet.</td></tr>";
-                }
-                ?>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Activity and Notifications -->
-    <div class="content-grid">
-        <!-- Recent Activity -->
-        <div class="card">
-            <h3>My Recent Activity</h3>
-            <div>
-                <?php
-                if ($student_id) {
-                    $activityQuery = "
-                        SELECT b.title, a.action_type, a.action_date
-                        FROM activity_log a
-                        JOIN books b ON a.book_id = b.book_id
-                        WHERE a.student_id = '$student_id'
-                        ORDER BY a.action_date DESC
-                        LIMIT 5
-                    ";
-                    $activityResult = $conn->query($activityQuery);
-
-                    if ($activityResult && $activityResult->num_rows > 0) {
-                        while ($row = $activityResult->fetch_assoc()) {
-                            $date = new DateTime($row['action_date']);
-                            $today = new DateTime();
-                            $daysAgo = $today->diff($date)->days;
-
-                            echo "<p>" . ucfirst($row['action_type']) . " <strong>" 
-                                . htmlspecialchars($row['title']) . "</strong> — $daysAgo day"
-                                . ($daysAgo == 1 ? '' : 's') . " ago</p>";
-                        }
-                    } else {
-                        echo "<p>No recent activity found.</p>";
-                    }
-                } else {
-                    echo "<p>Login required to view activity.</p>";
-                }
-                ?>
+          <!-- Notifications -->
+          <div class="panel" aria-label="Notifications">
+            <div class="panel-header">
+              <h3>Notifications</h3>
             </div>
-        </div>
-
-        <!-- Notifications -->
-        <div class="card">
-            <h3>Important Notifications</h3>
-            <div>
-                <?php
-                $notifQuery = "SELECT * FROM notifications ORDER BY date_created DESC LIMIT 5";
-                $notifResult = $conn->query($notifQuery);
-
-                if ($notifResult && $notifResult->num_rows > 0) {
-                    while ($notif = $notifResult->fetch_assoc()) {
-                        $bg = "#d1ecf1"; $border = "#bee5eb"; $color = "#0c5460";
-                        if (strtolower($notif['type']) === 'reminder') {
-                            $bg = "#fff3cd"; $border = "#ffeaa7"; $color = "#856404";
-                        } elseif (strtolower($notif['type']) === 'warning') {
-                            $bg = "#f8d7da"; $border = "#f5c6cb"; $color = "#721c24";
-                        }
-
-                        echo "
-                        <div style='background: $bg; border: 1px solid $border; border-radius: 6px; padding: 15px; margin: 10px 0;'>
-                            <div style='font-weight: bold; color: $color;'>" . htmlspecialchars($notif['type']) . "</div>
-                            <div style='font-size: 12px; color: $color; margin: 5px 0;'>" . htmlspecialchars($notif['message']) . "</div>
-                            <div style='font-size: 11px; color: gray;'>Posted: " . htmlspecialchars($notif['date_created']) . "</div>
-                        </div>";
-                    }
-                } else {
-                    echo "<p>No notifications at the moment.</p>";
-                }
-                ?>
+            <div class="panel-body">
+              <p class="empty">No notifications at the moment.</p>
+              <button class="btn" type="button">View all notifications</button>
             </div>
-            <div style="text-align: center; margin-top: 20px;">
-                <button class="btn">View All Notifications</button>
-            </div>
-        </div>
-    </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
 
-</div>
+  <!-- Floating Help -->
+  <button class="floating-help" type="button" aria-label="Help">
+    Help
+  </button>
+
+  <script>
+    // Optional: basic interactions to make the template feel alive
+    document.querySelectorAll('.help-btn, .floating-help').forEach(btn => {
+      btn.addEventListener('click', () => {
+        alert('How can we help you today?');
+      });
+    });
+
+    document.querySelector('.actions .secondary')?.addEventListener('click', () => {
+      alert('Add book form goes here.');
+    });
+  </script>
 </body>
 </html>
-=======
-<?php
-session_start();
-include 'db.php';
-
-// Redirect if not logged in
-if (!isset($_SESSION['full_name'])) {
-    header("Location: login.php");
-    exit();
-}
-
-$student_id = $_SESSION['user_id'] ?? null;
-
-// Default counts
-$borrowedCount = $reservedCount = $overdueCount = $feeAmount = 0;
-
-// Fetch stats if logged in
-if ($student_id) {
-    // 1. Borrowed
-    $borrowedQuery = "SELECT COUNT(*) AS total FROM borrow_records WHERE student_id = '$student_id' AND status = 'borrowed'";
-    $borrowedResult = $conn->query($borrowedQuery);
-    if ($borrowedResult) $borrowedCount = $borrowedResult->fetch_assoc()['total'] ?? 0;
-
-    // 2. Reserved
-    $reservedQuery = "SELECT COUNT(*) AS total FROM borrow_records WHERE student_id = '$student_id' AND status = 'reserved'";
-    $reservedResult = $conn->query($reservedQuery);
-    if ($reservedResult) $reservedCount = $reservedResult->fetch_assoc()['total'] ?? 0;
-
-    // 3. Overdue
-    $overdueQuery = "SELECT COUNT(*) AS total FROM borrow_records WHERE student_id = '$student_id' AND status = 'borrowed' AND due_date < NOW()";
-    $overdueResult = $conn->query($overdueQuery);
-    if ($overdueResult) $overdueCount = $overdueResult->fetch_assoc()['total'] ?? 0;
-
-    // 4. Fees
-    $feeQuery = "SELECT SUM(amount) AS total FROM fees WHERE student_id = '$student_id' AND status = 'unpaid'";
-    $feeResult = $conn->query($feeQuery);
-    if ($feeResult) $feeAmount = $feeResult->fetch_assoc()['total'] ?? 0;
-}
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Library Portal</title>
-    <link rel="stylesheet" href="studentstyle.css">
-</head>
-<body>
-<div class="container">
-
-    <!-- Header -->
-    <div class="header">
-        <h1>👤 Student Library Portal</h1>
-        <div class="user-info">
-            <div style="margin-left: 20px;">
-                <?php if (isset($_SESSION['full_name'])): ?>
-                    <span style="display: flex; align-items: center; gap: 8px;">
-                        <img src="profile.png" alt="Profile" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
-                        <?= htmlspecialchars($_SESSION['full_name']) ?>
-                    </span>
-                <?php else: ?>
-                    <span>Welcome, Student</span>
-                <?php endif; ?>
-            </div>
-            <form action="logout.php" method="POST" style="margin:0;">
-                <button type="submit" class="btn btn-danger">Logout</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-label">Books Borrowed</div>
-            <div class="stat-number borrowed"><?= $borrowedCount ?></div>
-            <div style="font-size: 12px; color: #666;">3 books allowed per semester</div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-label">Books Reserved</div>
-            <div class="stat-number books"><?= $reservedCount ?></div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-label">Overdue Books</div>
-            <div class="stat-number overdue"><?= $overdueCount ?></div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-label">Outstanding Fees</div>
-            <div class="stat-number members">₱<?= number_format($feeAmount, 2) ?></div>
-        </div>
-    </div>
-
-    <!-- Borrowed Books -->
-    <div class="card" style="margin-bottom: 30px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="margin: 0;">My Borrowed Books</h3>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <select style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                    <option>All My Books</option>
-                    <option>Currently Borrowed</option>
-                    <option>Reserved</option>
-                    <option>Overdue</option>
-                </select>
-            </div>
-        </div>
-
-        <table class="book-table">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Author</th>
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th>Availability</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php
-                $query = "
-                    SELECT b.title, b.author, b.category, b.ISBN, br.status, br.due_date
-                    FROM borrow_records AS br
-                    JOIN books AS b ON br.book_id = b.book_id
-                    WHERE br.student_id = '$student_id'
-                    ORDER BY br.borrow_date DESC
-                ";
-
-                $result = $conn->query($query);
-
-                if ($result && $result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        echo "<tr>
-                                <td><strong>" . htmlspecialchars($row['title']) . "</strong><br><small>ISBN: " . htmlspecialchars($row['ISBN']) . "</small></td>
-                                <td>" . htmlspecialchars($row['author']) . "</td>
-                                <td>" . htmlspecialchars($row['category']) . "</td>
-                                <td>" . ucfirst(htmlspecialchars($row['status'])) . "</td>
-                                <td>
-                                    <span class='status-badge status-" . htmlspecialchars($row['status']) . "'>" . ucfirst($row['status']) . "</span>
-                                    " . (!empty($row['due_date']) ? "<br><small>Due: " . date('M d, Y', strtotime($row['due_date'])) . "</small>" : "") . "
-                                </td>
-                              </tr>";
-                    }
-                } else {
-                    echo "<tr><td colspan='5' style='text-align:center; color:#666;'>No borrowed books yet.</td></tr>";
-                }
-                ?>
-            </tbody>
-        </table>
-    </div>
-    <div class="card" style="margin-bottom: 30px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="margin: 0;">Books</h3>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <input type="text" placeholder="Search books..." style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                <button class="btn" style="margin-right: 10px;" onclick="window.location.href='Books.php'">Search</button>
-                <select style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                    <option>All Books</option>
-                    <option>Fiction</option>
-                    <option>Sci-Fi</option>
-                    <option>Horror</option>
-                    <option>Non-Fiction</option>
-                    <option>Romance</option>
-                </select>
-            </div>
-        </div>
-
-        <table class="book-table">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Author</th>
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th>Availability</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php
-                $query = "
-                    SELECT * FROM books ORDER BY title ASC
-                ";
-
-                $result = $conn->query($query);
-
-                if ($result && $result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        echo "<tr>
-                                <td><strong>" . htmlspecialchars($row['title']) . "</strong><br><small>ISBN: " . htmlspecialchars($row['ISBN']) . "</small></td>
-                                <td>" . htmlspecialchars($row['author']) . "</td>
-                                <td>" . htmlspecialchars($row['category']) . "</td>
-                                <td>" . ucfirst(htmlspecialchars($row['status'])) . "</td>
-                                <td>
-                                    <span class='status-badge status-" . htmlspecialchars($row['status']) . "'>" . ucfirst($row['status']) . "</span>
-                                    " . (!empty($row['due_date']) ? "<br><small>Due: " . date('M d, Y', strtotime($row['due_date'])) . "</small>" : "") . "
-                                </td>
-                              </tr>";
-                    }
-                } else {
-                    echo "<tr><td colspan='5' style='text-align:center; color:#666;'>No borrowed books yet.</td></tr>";
-                }
-                ?>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Activity and Notifications -->
-    <div class="content-grid">
-        <!-- Recent Activity -->
-        <div class="card">
-            <h3>My Recent Activity</h3>
-            <div>
-                <?php
-                if ($student_id) {
-                    $activityQuery = "
-                        SELECT b.title, a.action_type, a.action_date
-                        FROM activity_log a
-                        JOIN books b ON a.book_id = b.book_id
-                        WHERE a.student_id = '$student_id'
-                        ORDER BY a.action_date DESC
-                        LIMIT 5
-                    ";
-                    $activityResult = $conn->query($activityQuery);
-
-                    if ($activityResult && $activityResult->num_rows > 0) {
-                        while ($row = $activityResult->fetch_assoc()) {
-                            $date = new DateTime($row['action_date']);
-                            $today = new DateTime();
-                            $daysAgo = $today->diff($date)->days;
-
-                            echo "<p>" . ucfirst($row['action_type']) . " <strong>" 
-                                . htmlspecialchars($row['title']) . "</strong> — $daysAgo day"
-                                . ($daysAgo == 1 ? '' : 's') . " ago</p>";
-                        }
-                    } else {
-                        echo "<p>No recent activity found.</p>";
-                    }
-                } else {
-                    echo "<p>Login required to view activity.</p>";
-                }
-                ?>
-            </div>
-        </div>
-
-        <!-- Notifications -->
-        <div class="card">
-            <h3>Important Notifications</h3>
-            <div>
-                <?php
-                $notifQuery = "SELECT * FROM notifications ORDER BY date_created DESC LIMIT 5";
-                $notifResult = $conn->query($notifQuery);
-
-                if ($notifResult && $notifResult->num_rows > 0) {
-                    while ($notif = $notifResult->fetch_assoc()) {
-                        $bg = "#d1ecf1"; $border = "#bee5eb"; $color = "#0c5460";
-                        if (strtolower($notif['type']) === 'reminder') {
-                            $bg = "#fff3cd"; $border = "#ffeaa7"; $color = "#856404";
-                        } elseif (strtolower($notif['type']) === 'warning') {
-                            $bg = "#f8d7da"; $border = "#f5c6cb"; $color = "#721c24";
-                        }
-
-                        echo "
-                        <div style='background: $bg; border: 1px solid $border; border-radius: 6px; padding: 15px; margin: 10px 0;'>
-                            <div style='font-weight: bold; color: $color;'>" . htmlspecialchars($notif['type']) . "</div>
-                            <div style='font-size: 12px; color: $color; margin: 5px 0;'>" . htmlspecialchars($notif['message']) . "</div>
-                            <div style='font-size: 11px; color: gray;'>Posted: " . htmlspecialchars($notif['date_created']) . "</div>
-                        </div>";
-                    }
-                } else {
-                    echo "<p>No notifications at the moment.</p>";
-                }
-                ?>
-            </div>
-            <div style="text-align: center; margin-top: 20px;">
-                <button class="btn">View All Notifications</button>
-            </div>
-        </div>
-    </div>
-
-</div>
-</body>
-</html>
->>>>>>> f618bed497b3adfbce81626dbf242f15d699dcf6
